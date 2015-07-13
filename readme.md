@@ -35,4 +35,11 @@ This is currently a manual hack but basically
 
 * convert the speclab FFT into a form gnuplot can easily read by running parseFFT.sh on it (have to hack script to take filenames & note the TODOs)
 * run generate.sh to produce a png that contains 3 line charts (1 per vibration axis) and 1 spectrogram of the fft
+* it also 
 
+# Tools Required
+
+* sox
+* speclab
+* bash/awk
+* vibsensor

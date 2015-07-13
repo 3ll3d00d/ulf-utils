@@ -88,9 +88,15 @@ fi
 echo "Generating plots using ${TARGET_DIR}/${PREFIX}_fft.txt and ${TARGET_DIR}/${PREFIX}_vib.csv"
 
 delete_or_blow "${TARGET_DIR}/${PREFIX}.png"
+delete_or_blow "${TARGET_DIR}/${PREFIX}_vib.dat"
+delete_or_blow "${TARGET_DIR}/${PREFIX}_vib_spectro.png"
 
 # locate the min/max vibration values
 VIB_SCALE=($(awk -F"," '
+function abs(value) {
+  return (value<0?-value:value);
+}
+
 BEGIN { min_vib = 1000; max_vib = 0; } 
 /^[0-9]/ { 
     if ($2 < min_vib) { min_vib = $2 }
@@ -100,14 +106,28 @@ BEGIN { min_vib = 1000; max_vib = 0; }
     if ($3 > max_vib) { max_vib = $3 }
     if ($4 > max_vib) { max_vib = $4 }
 }
-END { print min_vib " " max_vib }
+END { 
+	print min_vib " " max_vib " " (abs(min_vib) > abs(max_vib) ? abs(min_vib) : abs(max_vib))
+}
 ' ${TARGET_DIR}/${PREFIX}_vib.csv ))
 echo "Plotting vibrations to scale ${VIB_SCALE[0]} : ${VIB_SCALE[1]}"
 
 VIB_END=$(echo "${VIB_START}+${DURATION}" | bc)
 FFT_END=$(echo "${FFT_START}+${DURATION}" | bc)
+
 echo "Plotting vibrations from ${VIB_START}s to ${VIB_END}s"
 echo "Plotting FFT from ${FFT_START}s to ${FFT_END}s"
+
+echo "Scaling vib data to 0dBFS using ${VIB_SCALE[2]} scaling factor"
+echo "; Sample Rate 100" > ${TARGET_DIR}/${PREFIX}_vib.dat
+echo "; Channels 3" >> ${TARGET_DIR}/${PREFIX}_vib.dat
+awk -F"," -v scale_factor=${VIB_SCALE[2]} '
+    /^[0-9]/ { 
+	    print (NR-1)*0.01" "($2*(1/scale_factor))" "($3*(1/scale_factor))" "($3*(1/scale_factor))
+	}
+' ${TARGET_DIR}/${PREFIX}_vib.csv >> ${TARGET_DIR}/${PREFIX}_vib.dat
+
+sox -V ${TARGET_DIR}/${PREFIX}_vib.dat -n spectrogram -x 1500 -y 257 -w Hamming -z 60 -X 50 -o ${TARGET_DIR}/${PREFIX}_vib.png -t "${PREFIX} - Vibration Spectrogram"
 
 gnuplot <<EOF
 # set the output
@@ -131,13 +151,19 @@ plot '${TARGET_DIR}/${PREFIX}_vib.csv' using 1:3 title 'Y' with lines linestyle 
 set ylabel 'vibration z (g)'
 plot '${TARGET_DIR}/${PREFIX}_vib.csv' using 1:4 title 'Z' with lines linestyle 3
 
-# plot 2 - spectro
+# samples
+#set yrange [-0.5:0.5]
+#set xrange [-0.2:14.8]
+#set ylabel 'Amplitude (dBFS)'
+#plot '${TARGET_DIR}/${PREFIX}_samples_timed.txt' using 1:2 title 'Amplitude' with lines linestyle 4
+
+#  spectro
 set datafile separator " "
 
 # plot features
 set pm3d map
 #set contour surface
-set pm3d interpolate 20,20
+#set pm3d interpolate 20,20
 set cntrparam cubicspline
 
 # x = time
@@ -149,7 +175,7 @@ set xrange [${FFT_START}:${FFT_END}]
 set xtics ${FFT_START},1,${FFT_END}
 
 # frequency
-set yrange [0:100]
+set yrange [0:50]
 set mytics 10
 set ylabel 'Frequency (Hz)'
 
